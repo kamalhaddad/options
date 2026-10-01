@@ -13,7 +13,7 @@ dependencies = ["numpy>=1.26", "pandas>=2.1", "scipy>=1.11"]
 [project.optional-dependencies]
 live = ["yfinance>=0.2.40"]
 parquet = ["pyarrow>=14"]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff==0.16.9"]
 
 [project.scripts]
 optlab = "optlab.cli:main"

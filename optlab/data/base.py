@@ -80,7 +80,9 @@ def enrich_chain(df: pd.DataFrame, date: pd.Timestamp) -> pd.DataFrame:
         df["delta"] = np.nan
     t = (df["expiration"] - date).dt.days.clip(lower=0) / 365.0
     for i in df.index[df["iv"].isna()]:
-        df.at[i, "iv"] = implied_vol(df.at[i, "mid"], df.at[i, "underlying"], df.at[i, "strike"], t[i], df.at[i, "kind"])
+        df.at[i, "iv"] = implied_vol(
+            df.at[i, "mid"], df.at[i, "underlying"], df.at[i, "strike"], t[i], df.at[i, "kind"]
+        )
     for i in df.index[df["delta"].isna() & df["iv"].notna()]:
         df.at[i, "delta"] = bs_delta(df.at[i, "underlying"], df.at[i, "strike"], t[i], df.at[i, "iv"], df.at[i, "kind"])
     return df[CHAIN_COLUMNS]
