@@ -6,6 +6,6 @@ __pycache__/
 build/
 dist/
 # Paper journal and run output stay local: they describe the account.
-journal/
-out/
-data/
+/journal/
+/out/
+/data/
