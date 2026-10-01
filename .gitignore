@@ -1,0 +1,11 @@
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+# Paper journal and run output stay local: they describe the account.
+/journal/
+/out/
+/data/

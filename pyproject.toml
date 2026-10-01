@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "optlab"
+version = "0.1.0"
+description = "Backtester and daily scanner for a rules-based options premium strategy"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "pandas>=2.1", "scipy>=1.11"]
+
+[project.optional-dependencies]
+live = ["yfinance>=0.2.40"]
+parquet = ["pyarrow>=14"]
+dev = ["pytest>=8", "ruff==0.16.9"]
+
+[project.scripts]
+optlab = "optlab.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["optlab*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B905"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
