@@ -1,0 +1,24 @@
+name: Daily scan
+
+# Manual only for now. To run it every weekday at about 3:30pm New York time,
+# uncomment the schedule below. Do that only once the repo is private or the
+# report is kept out of public view: it lists the account's suggested trades.
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "30 19 * * 1-5"  # 19:30 UTC = 3:30pm EDT (2:30pm EST)
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .[live]
+      - name: Scan
+        run: optlab scan --source yahoo --config config/default.toml --out report.md
+      - name: Publish report
+        if: always()
+        run: test -f report.md && cat report.md >> "$GITHUB_STEP_SUMMARY" || true

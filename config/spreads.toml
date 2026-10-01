@@ -1,0 +1,7 @@
+# Same as the defaults, but for an account whose broker allows defined-risk
+# spreads (a margin account, or a cash account that permits them).
+[account]
+spreads_allowed = true
+
+[universe]
+index = ["SPY"]

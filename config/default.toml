@@ -1,0 +1,44 @@
+# Settings for a $5,000 cash account. Every key is optional; anything left out
+# uses the default in optlab/config.py, which follows the strategy playbook.
+# Copy this file, edit it, and pass it with --config.
+
+[account]
+starting_capital = 5000
+account_type = "cash"
+# Most brokers do not allow spreads in a cash account. With false, short
+# premium can only be cash-secured puts, which a $5,000 account rarely fits
+# under the 2% per-trade cap. Set true if your broker allows defined-risk
+# spreads in your account.
+spreads_allowed = false
+commission_per_contract = 0.65
+
+[universe]
+index = ["SPY"]
+stocks = []
+
+[entry]
+short_dte_min = 30
+short_dte_max = 45
+put_spread_delta = 0.30
+condor_delta = 0.16
+wing_width = 1.0
+min_credit_to_width_spread = 0.33
+min_credit_to_width_condor = 0.25
+ivr_sell_min = 30
+ivr_buy_max = 25
+
+[exits]
+short_profit_target = 0.50
+short_stop_multiple = 2.0
+short_exit_dte = 21
+
+[risk]
+per_trade_max_loss_pct = 0.02
+portfolio_max_loss_pct = 0.25
+stress_max_loss_pct = 0.15
+
+[hedge]
+enabled = true
+premium_share = 0.10
+delta = 0.05
+symbol = "SPY"
