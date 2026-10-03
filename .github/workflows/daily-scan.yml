@@ -1,24 +1,75 @@
 name: Daily scan
 
-# Manual only for now. To run it every weekday at about 3:30pm New York time,
-# uncomment the schedule below. Do that only once the repo is private or the
-# report is kept out of public view: it lists the account's suggested trades.
+# Runs the paper-trading scan every weekday at about 3:30pm New York time and
+# posts the report as a comment on the "Daily options scan" issue. The paper
+# journal is kept on the `paper-journal` branch so it carries over between runs.
+# Suggestions only: nothing here places orders. This repo is public, so the
+# reports and the paper journal are public too.
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: "30 19 * * 1-5"  # 19:30 UTC = 3:30pm EDT (2:30pm EST)
+  schedule:
+    - cron: "30 19 * * 1-5" # 19:30 UTC = 3:30pm EDT (2:30pm EST)
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: daily-scan
+  cancel-in-progress: false
 
 jobs:
   scan:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      JOURNAL_BRANCH: paper-journal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -e .[live]
-      - name: Scan
-        run: optlab scan --source yahoo --config config/default.toml --out report.md
-      - name: Publish report
+
+      - name: Load paper journal
+        run: |
+          mkdir -p journal
+          if git fetch --depth=1 origin "$JOURNAL_BRANCH"; then
+            git show "origin/$JOURNAL_BRANCH:paper.json" > journal/paper.json || rm -f journal/paper.json
+          fi
+
+      - name: Scan and record
+        run: optlab paper --source yahoo --config config/default.toml --journal journal/paper.json --out report.md
+
+      - name: Save paper journal
+        run: |
+          tmp=$(mktemp -d)
+          cp journal/paper.json "$tmp/paper.json"
+          cd "$tmp"
+          git init -q -b "$JOURNAL_BRANCH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "${{ github.server_url }}/${{ github.repository }}"
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            fetch -q --depth=1 origin "$JOURNAL_BRANCH" && git reset -q --soft FETCH_HEAD || true
+          git add paper.json
+          git commit -q -m "Paper journal $(date -u +%F)" || exit 0
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            push -q origin "HEAD:$JOURNAL_BRANCH"
+
+      - name: Post report
         if: always()
-        run: test -f report.md && cat report.md >> "$GITHUB_STEP_SUMMARY" || true
+        run: |
+          test -f report.md || { echo "Scan failed before writing a report." > report.md; }
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+          title="Daily options scan"
+          issue=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            --jq ".[] | select(.title == \"$title\") | .number" | head -1)
+          if [ -z "$issue" ]; then
+            issue=$(gh issue create --title "$title" \
+              --body "Each weekday's scan report is posted here as a comment. Suggestions only; nothing places orders." \
+              | grep -o '[0-9]*$')
+          fi
+          printf '%s\n\n[Run log](%s)\n' "$(cat report.md)" \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" > comment.md
+          gh issue comment "$issue" --body-file comment.md
