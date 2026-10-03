@@ -1,0 +1,14 @@
+{
+  "cash": 5000,
+  "peak_equity": 5000,
+  "hedge_budget": 0.0,
+  "selling_halted": false,
+  "next_id": 1,
+  "last_entry_week": "2026-40",
+  "open": [],
+  "closed": [],
+  "equity_log": {
+    "2026-10-02": 5000
+  },
+  "iv_history": {}
+}
