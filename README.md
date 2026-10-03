@@ -90,8 +90,8 @@ optlab backtest --source csv --chains spy_chains_2007_2026.parquet \
 
 `optlab paper` marks open paper positions, closes anything that hit a target,
 stop or time exit, and on the first trading day of each week opens new
-trades that pass every check. It writes `journal/paper.json` (git-ignored, so
-account details never reach this public repo) and prints a report like:
+trades that pass every check. Locally it writes `journal/paper.json`
+(git-ignored) and prints a report like:
 
 ```
 **Regime: YELLOW** (size multiplier 0.5)
@@ -102,9 +102,11 @@ VIX 17.2, VIX/VIX3M 0.93, SPY vs 200-day +3.1%, VIX minus realized +4.0 pts
 - SPY iron_condor x1 (index): Sell ... Limit credit 0.24, max loss $76.00
 ```
 
-`.github/workflows/daily-scan.yml` runs the scan in GitHub Actions and posts
-the report to the run summary. It is manual-only until the schedule is
-switched on.
+`.github/workflows/daily-scan.yml` runs `optlab paper` every weekday at about
+3:30pm New York time on GitHub's servers. It keeps the paper journal on the
+`paper-journal` branch and posts each report as a comment on the "Daily
+options scan" issue, so GitHub notifies you. While this repo is public, those
+reports and the paper journal are public too.
 
 ## Known gaps
 
