@@ -57,7 +57,7 @@ class RiskCheck:
 def check_book(
     book: list[Position], spots: dict[str, float], date: pd.Timestamp, equity: float, cfg: RiskConfig
 ) -> RiskCheck:
-    total = sum(p.risk_dollars for p in book if p.sleeve != "hedge")
+    total = sum(p.risk_dollars for p in book if p.sleeve != "hedge" and p.notes.get("risk_basis") != "stress")
     stress = stress_loss(book, spots, date, cfg)
     vega = vega_loss(book, spots, date, cfg)
     res = RiskCheck(True, "", total, stress, vega)

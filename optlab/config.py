@@ -85,6 +85,14 @@ class RiskConfig:
     sleeve_single_stock: float = 0.20
     sleeve_directional: float = 0.20
     sleeve_hedge: float = 0.10
+    # Cash-secured puts. Their max loss is owning the stock, which no small
+    # account fits under the 2% and 25% max-loss caps. With "stress", a CSP is
+    # sized by its loss in the stress test instead, and left out of the
+    # combined max-loss cap; the book-wide stress cap still applies.
+    csp_risk_basis: str = "max_loss"  # "max_loss" or "stress"
+    csp_stress_max_pct: float = 0.05  # per position, stress-test loss
+    csp_max_collateral_pct: float = 0.50  # per position, cash tied up
+    csp_max_positions: int = 2
 
 
 @dataclass
@@ -109,6 +117,9 @@ class UniverseConfig:
     index: list[str] = field(default_factory=lambda: ["SPY"])
     stocks: list[str] = field(default_factory=list)
     min_price: float = 20.0
+    # Before a name has 20 days of IV history, call its options rich when
+    # implied vol is at least this many points above 20-day realized vol.
+    iv_rv_rich_fallback: float = 3.0
 
 
 @dataclass

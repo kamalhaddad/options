@@ -26,6 +26,7 @@ class SyntheticParams:
     end: str = "2024-12-31"
     seed: int = 7
     s0: float = 200.0
+    stock_s0: float = 50.0
     drift: float = 0.08
     kappa: float = 3.0  # variance mean reversion per year
     theta: float = 0.13**2  # long-run variance
@@ -104,7 +105,7 @@ class SyntheticMarket(MarketData):
             rich = np.cumsum(rng.standard_normal(n)) * 0.002
             rich = 1.0 + 0.15 * np.tanh(rich - rich.mean())
             r = beta * index_ret + idio * math.sqrt(dt) * rng.standard_normal(n) - 0.5 * idio**2 * dt
-            self._closes[sym] = pd.Series(50.0 * np.exp(np.cumsum(r)), self._dates)
+            self._closes[sym] = pd.Series(p.stock_s0 * np.exp(np.cumsum(r)), self._dates)
             total = np.sqrt(beta**2 * expected_vol(30) ** 2 + idio**2)
             self._iv_level[sym] = pd.Series(total * rich * p.vrp_mult + p.vrp_add, self._dates)
 
