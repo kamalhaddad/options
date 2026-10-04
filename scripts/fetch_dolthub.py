@@ -20,35 +20,69 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 
+ROW_LIMIT = 1000
+COLUMNS = [
+    "underlying_symbol",
+    "quote_date",
+    "expiration",
+    "strike",
+    "option_type",
+    "bid",
+    "ask",
+    "underlying_price",
+    "implied_volatility",
+    "delta",
+]
 API = "https://www.dolthub.com/api/v1alpha1/post-no-preference/{db}/master?q={q}"
 
 
-def sql(db: str, q: str, tries: int = 6) -> list[dict]:
+class RowLimit(Exception):
+    """DoltHub's SQL API returns at most 1,000 rows per query."""
+
+
+def sql(db: str, q: str, tries: int = 5) -> list[dict]:
     url = API.format(db=db, q=urllib.parse.quote(q))
     for attempt in range(tries):
         try:
             with urllib.request.urlopen(url, timeout=120) as r:
                 d = json.load(r)
-            if d.get("query_execution_status") == "Success":
-                return d.get("rows", [])
-            raise RuntimeError(f"{d.get('query_execution_status')}: {d.get('query_execution_message')}")
+            status, rows = d.get("query_execution_status"), d.get("rows") or []
+            if status == "RowLimit" or len(rows) >= ROW_LIMIT:
+                raise RowLimit  # results were cut off
+            if status == "Success":
+                return rows
+            raise RuntimeError(f"{status}: {d.get('query_execution_message')}")
+        except RowLimit:
+            raise
         except Exception:
             if attempt == tries - 1:
                 raise
-            time.sleep(min(2 ** (attempt + 1), 60))
+            time.sleep(min(2 ** (attempt + 1), 30))
     return []
 
 
-def fetch_day(day: str, symbols: list[str]) -> pd.DataFrame:
+def sql_by_symbol(db: str, select: str, day: str, symbols: list[str]) -> list[dict]:
+    """Rows for `symbols` on `day`, halving the symbol list whenever a query hits the row limit."""
     names = ",".join(f"'{s}'" for s in symbols)
-    opts = sql(
+    try:
+        return sql(db, f"{select} WHERE date='{day}' AND act_symbol IN ({names})")
+    except RowLimit:
+        if len(symbols) == 1:
+            raise RuntimeError(f"{symbols[0]} alone has over {ROW_LIMIT} rows on {day}") from None
+        mid = len(symbols) // 2
+        return sql_by_symbol(db, select, day, symbols[:mid]) + sql_by_symbol(db, select, day, symbols[mid:])
+
+
+def fetch_day(day: str, symbols: list[str]) -> pd.DataFrame:
+    opts = sql_by_symbol(
         "options",
-        "SELECT date, act_symbol, expiration, strike, call_put, bid, ask, vol, delta "
-        f"FROM option_chain WHERE date='{day}' AND act_symbol IN ({names})",
+        "SELECT date, act_symbol, expiration, strike, call_put, bid, ask, vol, delta FROM option_chain",
+        day,
+        symbols,
     )
     if not opts:
         return pd.DataFrame()
-    px = sql("stocks", f"SELECT act_symbol, close FROM ohlcv WHERE date='{day}' AND act_symbol IN ({names})")
+    px = sql_by_symbol("stocks", "SELECT act_symbol, close FROM ohlcv", day, symbols)
     closes = {r["act_symbol"]: float(r["close"]) for r in px}
     df = pd.DataFrame(opts)
     df["underlying_price"] = df["act_symbol"].map(closes)
@@ -112,6 +146,10 @@ def main() -> None:
         print(f"{len(still_failed)} days could not be fetched: {', '.join(still_failed)}")
     if len(still_failed) > args.max_failed * len(days):
         raise SystemExit("Too many days failed to download")
+    if not frames:
+        print("No data in this range")
+        pd.DataFrame(columns=COLUMNS).to_csv(args.out, index=False)
+        return
     out = pd.concat(frames, ignore_index=True).sort_values(["quote_date", "underlying_symbol"])
     out.to_csv(args.out, index=False)
     by_sym = out.groupby("underlying_symbol").quote_date.agg(["min", "max", "nunique"])

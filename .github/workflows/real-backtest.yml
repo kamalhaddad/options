@@ -16,42 +16,92 @@ on:
     branches: [claude/backtester-scanner-ver3h2]
     paths: [scripts/fetch_dolthub.py, .github/workflows/real-backtest.yml, config/dolthub.toml]
 
+concurrency:
+  group: real-backtest
+  cancel-in-progress: true
+
 env:
   START: ${{ inputs.start || '2019-01-01' }}
   END: ${{ inputs.end || '2026-09-30' }}
   SYMBOLS: SPY T PFE INTC KMI F SOFI HPE WBD KHC VZ BAC EWZ FXI SLV GDX XLF
 
 jobs:
-  backtest:
+  # One job per year, run in parallel and cached per year, so no single job
+  # runs into GitHub's time limit and a re-run only fetches what is missing.
+  fetch:
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        year: [2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pandas
+      - name: Date range
+        id: range
+        run: |
+          s="${{ matrix.year }}-01-01"; e="${{ matrix.year }}-12-31"
+          [[ "$START" > "$s" ]] && s="$START"
+          [[ "$END" < "$e" ]] && e="$END"
+          echo "start=$s" >> "$GITHUB_OUTPUT"; echo "end=$e" >> "$GITHUB_OUTPUT"
+      - name: Restore chains
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data/chains_${{ matrix.year }}.csv.gz
+          key: dolthub-v3-${{ steps.range.outputs.start }}-${{ steps.range.outputs.end }}-${{ env.SYMBOLS }}
+      - name: Fetch chains from DoltHub
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p data
+          python scripts/fetch_dolthub.py --start "${{ steps.range.outputs.start }}" \
+            --end "${{ steps.range.outputs.end }}" --symbols $SYMBOLS --out data/chains_${{ matrix.year }}.csv.gz
+      - name: Save chains
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/chains_${{ matrix.year }}.csv.gz
+          key: dolthub-v3-${{ steps.range.outputs.start }}-${{ steps.range.outputs.end }}-${{ env.SYMBOLS }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chains-${{ matrix.year }}
+          path: data/chains_${{ matrix.year }}.csv.gz
+          if-no-files-found: ignore
+          retention-days: 7
+
+  backtest:
+    needs: fetch
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -e .
-
-      # Restore and save separately so a long download is kept even if the backtest step fails.
-      - name: Restore option chains
-        id: cache
-        uses: actions/cache/restore@v4
+      - uses: actions/download-artifact@v4
         with:
-          path: data/dolthub_chains.csv.gz
-          key: dolthub-v2-${{ env.START }}-${{ env.END }}-${{ env.SYMBOLS }}
-
-      - name: Fetch option chains from DoltHub
-        if: steps.cache.outputs.cache-hit != 'true'
+          pattern: chains-*
+          path: data
+          merge-multiple: true
+      - name: Combine years
         run: |
-          mkdir -p data
-          python scripts/fetch_dolthub.py --start "$START" --end "$END" --symbols $SYMBOLS --out data/dolthub_chains.csv.gz
-
-      - name: Save option chains
-        if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: data/dolthub_chains.csv.gz
-          key: dolthub-v2-${{ env.START }}-${{ env.END }}-${{ env.SYMBOLS }}
+          python - <<'PY'
+          import glob
+          import pandas as pd
+          parts = [pd.read_csv(p) for p in sorted(glob.glob("data/chains_*.csv.gz"))]
+          df = pd.concat([p for p in parts if not p.empty], ignore_index=True)
+          df.to_csv("data/dolthub_chains.csv.gz", index=False)
+          g = df.groupby("underlying_symbol").quote_date.agg(["min", "max", "nunique"])
+          print(g.to_string())
+          with open("data/coverage.txt", "w") as f:
+              f.write(g.to_string() + "\n")
+          PY
 
       - name: Fetch Cboe indices
         run: |
@@ -70,6 +120,9 @@ jobs:
             --start "$bt_start" --end "$END" --out out | tee out/summary.txt
           {
             echo '```'
+            echo "Data coverage (first day, last day, days):"
+            cat data/coverage.txt
+            echo
             cat out/summary.txt
             python - <<'PY'
           import pandas as pd
