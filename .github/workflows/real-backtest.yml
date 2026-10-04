@@ -118,13 +118,7 @@ jobs:
             --vix data/VIX_History.csv --vix3m data/VIX3M_History.csv --put-index data/PUT_History.csv \
             --config config/default.toml config/dolthub.toml \
             --start "$bt_start" --end "$END" --out out | tee out/summary.txt
-          {
-            echo '```'
-            echo "Data coverage (first day, last day, days):"
-            cat data/coverage.txt
-            echo
-            cat out/summary.txt
-            python - <<'PY'
+          python - <<'PY' | tee out/breakdown.txt
           import pandas as pd
           def read(path):
               try:
@@ -144,7 +138,23 @@ jobs:
               s["why"] = s.sleeve + ": " + s.reason.str.replace(r"[0-9$.,]+", "#", regex=True)
               print()
               print(s.why.value_counts().head(15).to_string())
+          e = pd.read_csv("out/equity.csv", index_col="date", parse_dates=True)
+          yearly = e.resample("YE").last().pct_change()
+          yearly.iloc[0] = e.resample("YE").last().iloc[0] / e.iloc[0] - 1
+          print()
+          print("Return by year")
+          print((100 * yearly).round(1).rename(index=lambda d: d.year).to_string())
+          if not t.empty:
+              print()
+              cols = ["symbol", "sleeve", "structure", "entry_date", "exit_date", "contracts", "strikes", "entry_price", "pnl", "exit_reason"]
+              print(t[cols].to_string(index=False))
           PY
+          {
+            echo '```'
+            echo "Data coverage (first day, last day, days):"
+            cat data/coverage.txt
+            echo
+            cat out/summary.txt out/breakdown.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

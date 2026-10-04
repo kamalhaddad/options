@@ -59,6 +59,7 @@ def cmd_backtest(args) -> None:
     else:
         put = simple_putwrite(market, cfg.universe.index[0], eq.index[0], eq.index[-1])
         bench_name = "Simple put-write benchmark (1-month ATM, cash-secured, same data)"
+    put = put / put.iloc[0] * eq.iloc[0]  # same starting capital as the strategy
     bench = summarize(put)
     print(format_summary("Strategy", stats))
     print(format_summary(bench_name, bench))
@@ -70,7 +71,7 @@ def cmd_backtest(args) -> None:
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)
         result.trade_frame().to_csv(out / "trades.csv", index=False)
-        pd.DataFrame({"strategy": eq, "benchmark": put.reindex(eq.index).ffill() / put.iloc[0] * eq.iloc[0]}).to_csv(
+        pd.DataFrame({"strategy": eq, "benchmark": put.reindex(eq.index).ffill()}).to_csv(
             out / "equity.csv", index_label="date"
         )
         pd.DataFrame(result.skips, columns=["date", "symbol", "sleeve", "reason"]).to_csv(
