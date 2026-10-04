@@ -32,18 +32,26 @@ jobs:
           python-version: "3.12"
       - run: pip install -e .
 
-      - name: Cache option chains
+      # Restore and save separately so a long download is kept even if the backtest step fails.
+      - name: Restore option chains
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: data/dolthub_chains.csv.gz
-          key: dolthub-${{ env.START }}-${{ env.END }}-${{ hashFiles('scripts/fetch_dolthub.py') }}-${{ env.SYMBOLS }}
+          key: dolthub-v2-${{ env.START }}-${{ env.END }}-${{ env.SYMBOLS }}
 
       - name: Fetch option chains from DoltHub
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p data
           python scripts/fetch_dolthub.py --start "$START" --end "$END" --symbols $SYMBOLS --out data/dolthub_chains.csv.gz
+
+      - name: Save option chains
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/dolthub_chains.csv.gz
+          key: dolthub-v2-${{ env.START }}-${{ env.END }}-${{ env.SYMBOLS }}
 
       - name: Fetch Cboe indices
         run: |
