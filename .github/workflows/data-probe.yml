@@ -2,6 +2,9 @@ name: Data probe
 
 on:
   workflow_dispatch:
+  push:
+    branches: [claude/backtester-scanner-ver3h2]
+    paths: [scripts/**, .github/workflows/data-probe.yml]
 
 jobs:
   probe:
