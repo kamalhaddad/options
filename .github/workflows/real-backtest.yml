@@ -14,7 +14,7 @@ on:
         default: "2026-09-30"
   push:
     branches: [claude/backtester-scanner-ver3h2]
-    paths: [scripts/fetch_dolthub.py, .github/workflows/real-backtest.yml, config/dolthub.toml]
+    paths: [scripts/fetch_dolthub.py, .github/workflows/real-backtest.yml, "config/**", "optlab/**"]
 
 concurrency:
   group: real-backtest

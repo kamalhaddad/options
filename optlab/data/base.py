@@ -22,6 +22,18 @@ from ..pricing import bs_delta, implied_vol
 CHAIN_COLUMNS = ["expiration", "strike", "kind", "bid", "ask", "mid", "iv", "delta", "underlying"]
 
 
+def empty_chain() -> pd.DataFrame:
+    """A chain with no rows but the right column types, so date arithmetic still works."""
+    return pd.DataFrame(
+        {
+            "expiration": pd.Series(dtype="datetime64[ns]"),
+            "strike": pd.Series(dtype=float),
+            "kind": pd.Series(dtype=str),
+            **{c: pd.Series(dtype=float) for c in CHAIN_COLUMNS[3:]},
+        }
+    )
+
+
 class MarketData(ABC):
     """Daily end-of-day market data for a set of symbols."""
 

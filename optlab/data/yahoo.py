@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from .base import CHAIN_COLUMNS, MarketData, enrich_chain
+from .base import MarketData, empty_chain, enrich_chain
 
 
 class YahooMarket(MarketData):
@@ -62,7 +62,7 @@ class YahooMarket(MarketData):
                     )
                 )
         if not frames:
-            chain = pd.DataFrame(columns=CHAIN_COLUMNS)
+            chain = empty_chain()
         else:
             chain = pd.concat(frames, ignore_index=True)
             chain = chain[(chain.ask > 0) & (chain.bid >= 0)]
