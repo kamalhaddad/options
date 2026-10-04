@@ -56,10 +56,15 @@ file (`config/default.toml` lists the common ones).
 - **Yellow regime and drawdowns halve each sleeve's total budget, not the
   per-trade cap.** At $5,000, half of the 2% cap is $50, which is less than
   one $1-wide spread risks, so halving per trade would mean no trades at all.
-- **Spreads are off by default** (`spreads_allowed = false`) because most
-  brokers do not allow them in a cash account. With them off, short premium
-  falls back to cash-secured puts, which a $5,000 account almost never fits
-  under a 2% cap. Use `config/spreads.toml` if your broker allows spreads.
+- **Cash account, no spreads** (`spreads_allowed = false`). Short premium is
+  cash-secured puts on liquid names priced roughly $10 to $25
+  (`config/default.toml`). A put's max loss is owning 100 shares, which never
+  fits the 2% per-trade cap, so with `csp_risk_basis = "stress"` each put is
+  sized so the stress test (10% gap down, IV doubles) costs at most 5% of the
+  account, ties up at most half the cash, and at most 2 are open. The
+  book-wide 15% stress cap still applies. SPY puts need far more cash than
+  the account has, so the index sleeve stays idle. Use `config/spreads.toml`
+  for an account that allows spreads.
 - **Exits are checked on daily closes.** Real good-till-canceled orders fill
   intraday, so stops in the backtest can be worse than live and profit
   targets can be late by a day.

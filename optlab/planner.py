@@ -16,7 +16,7 @@ from . import trades as tr
 from .config import Config
 from .data.base import MarketData
 from .pricing import implied_vol
-from .risk import check_book, contracts_for, drawdown_multiplier
+from .risk import check_book, contracts_for, drawdown_multiplier, stress_loss
 from .trades import MULT, Leg, Position
 
 
@@ -157,10 +157,32 @@ class Planner:
         max_loss = tr.max_loss_per_contract(structure, legs, entry, width)
         pos = Position(symbol, structure, sleeve, legs, 0, date, entry, max_loss)
         pos.notes["why"] = why
+        if structure == "csp" and self.cfg.risk.csp_risk_basis == "stress":
+            pos.contracts = 1
+            spot = {symbol: self.spot(date, symbol)}
+            pos.notes["risk_basis"] = "stress"
+            pos.notes["stress_per_contract"] = round(stress_loss([pos], spot, date, self.cfg.risk), 2)
+            pos.contracts = 0
         return pos
 
     def _size_and_check(self, date, pos: Position, budget: float, state: BookState, book: list[Position]):
-        n = contracts_for(pos.max_loss, budget)
+        if pos.notes.get("risk_basis") == "stress":
+            r = self.cfg.risk
+            stress_budget = r.csp_stress_max_pct * state.equity
+            collateral_budget = r.csp_max_collateral_pct * state.equity
+            n = min(
+                contracts_for(pos.notes["stress_per_contract"], stress_budget),
+                contracts_for(pos.max_loss, collateral_budget),
+            )
+            if n < 1:
+                return Skip(
+                    pos.symbol,
+                    pos.sleeve,
+                    f"one put ties up ${pos.max_loss:,.0f} (cap ${collateral_budget:,.0f}) and loses "
+                    f"${pos.notes['stress_per_contract']:,.0f} in the stress test (cap ${stress_budget:,.0f})",
+                )
+        else:
+            n = contracts_for(pos.max_loss, budget)
         if n < 1:
             return Skip(pos.symbol, pos.sleeve, f"one contract risks ${pos.max_loss:,.0f}, budget ${budget:,.0f}")
         reserved = sum(p.risk_dollars for p in book if p.is_short_premium)
@@ -198,6 +220,8 @@ class Planner:
         plan = DayPlan(date, reg)
         plan.exits = self.exits(date, state.positions)
         if not entries:
+            for sym in cfg.universe.index + cfg.universe.stocks:
+                self.record_iv(date, sym)
             return plan
 
         closing = {id(e.position) for e in plan.exits}
@@ -262,25 +286,37 @@ class Planner:
 
         # Sleeve 2: single-stock premium, richest names first.
         if size > 0 and selling_ok:
+
+            def rich(s):
+                if s["ivr"] is not None:
+                    return s["ivr"] >= cfg.entry.ivr_sell_min
+                return (s["iv_rv"] or 0) >= cfg.universe.iv_rv_rich_fallback
+
             ranked = [
                 (sym, s)
                 for sym, s in info.items()
                 if sym in cfg.universe.stocks
                 and (sym, "single_stock") not in open_syms
-                and s["ivr"] is not None
-                and s["ivr"] >= cfg.entry.ivr_sell_min
+                and rich(s)
                 and (s["iv_rv"] or 0) > 0
                 and s["trend"] != "bearish"
                 and (s["straddle_mom"] is None or s["straddle_mom"] <= 0)
                 and s["price"] >= cfg.universe.min_price
             ]
-            ranked.sort(key=lambda kv: (kv[1]["ivr"], kv[1]["iv_rv"]), reverse=True)
+            ranked.sort(key=lambda kv: (kv[1]["ivr"] or 0, kv[1]["iv_rv"]), reverse=True)
+            stress_csps = not cfg.account.spreads_allowed and cfg.risk.csp_risk_basis == "stress"
             for sym, s in ranked:
-                room = self._sleeve_room("single_stock", cfg.risk.sleeve_single_stock, state, book, size)
-                if room < 1:
-                    break
+                if stress_csps:
+                    if sum(p.structure == "csp" for p in book) >= cfg.risk.csp_max_positions:
+                        break
+                    room = per_trade  # unused for stress-sized puts
+                else:
+                    room = self._sleeve_room("single_stock", cfg.risk.sleeve_single_stock, state, book, size)
+                    if room < 1:
+                        break
                 built = self._short_premium(date, sym, "bullish")
-                why = f"IV Rank {s['ivr']:.0f}, IV-RV {s['iv_rv']:+.1f} pts"
+                ivr = "n/a" if s["ivr"] is None else f"{s['ivr']:.0f}"
+                why = f"IV Rank {ivr}, IV-RV {s['iv_rv']:+.1f} pts"
                 add(self._build(date, sym, "single_stock", built, why), min(per_trade, room))
 
         # Sleeve 3: directional buying, only when options are cheap.

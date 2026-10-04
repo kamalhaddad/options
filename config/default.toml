@@ -5,16 +5,17 @@
 [account]
 starting_capital = 5000
 account_type = "cash"
-# Most brokers do not allow spreads in a cash account. With false, short
-# premium can only be cash-secured puts, which a $5,000 account rarely fits
-# under the 2% per-trade cap. Set true if your broker allows defined-risk
-# spreads in your account.
+# Cash account, no margin (KH, 2026-10-04): no spreads. Short premium is
+# cash-secured puts on low-priced names (see [risk] and [universe]).
 spreads_allowed = false
 commission_per_contract = 0.65
 
 [universe]
 index = ["SPY"]
-stocks = []
+# Liquid names cheap enough that one cash-secured put ties up at most half the
+# account. The scanner skips any whose price has moved out of range.
+stocks = ["T", "PFE", "INTC", "KMI", "F", "SOFI", "HPE", "WBD", "KHC", "VZ", "BAC", "EWZ", "FXI", "SLV", "GDX", "XLF"]
+min_price = 10
 
 [entry]
 short_dte_min = 30
@@ -36,6 +37,12 @@ short_exit_dte = 21
 per_trade_max_loss_pct = 0.02
 portfolio_max_loss_pct = 0.25
 stress_max_loss_pct = 0.15
+# A cash-secured put's max loss is owning the stock, which never fits the 2%
+# cap. Size each one by its stress-test loss instead, at most 2 open.
+csp_risk_basis = "stress"
+csp_stress_max_pct = 0.05
+csp_max_collateral_pct = 0.50
+csp_max_positions = 2
 
 [hedge]
 enabled = true
