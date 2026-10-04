@@ -157,6 +157,8 @@ def straddle_momentum(iv_history: pd.Series, closes: pd.Series, date: pd.Timesta
         if iv.empty:
             continue
         cost = 0.8 * float(iv.iloc[-1]) * math.sqrt(hold / 252)
+        if not cost > 0:
+            continue
         move = abs(float(window.iloc[i + hold] / window.iloc[i] - 1))
         rets.append(move / cost - 1)
     return float(np.mean(rets)) if rets else None

@@ -72,7 +72,7 @@ class MarketData(ABC):
     def atm_iv(self, date: pd.Timestamp, symbol: str, dte: int = 30) -> float | None:
         """At-the-money implied vol (as a decimal) near `dte` days out."""
         ch = self.chain(date, symbol, max(dte - 15, 1), dte + 20)
-        ch = ch.dropna(subset=["iv"])
+        ch = ch[ch.iv > 0]
         if ch.empty:
             return None
         ch = ch.assign(dte_gap=(ch.expiration - date).dt.days.sub(dte).abs())
@@ -85,11 +85,14 @@ class MarketData(ABC):
 def enrich_chain(df: pd.DataFrame, date: pd.Timestamp) -> pd.DataFrame:
     """Add mid, and fill missing iv and delta from Black-Scholes."""
     df = df.copy()
+    # Vendor files carry crossed, zero-ask and negative quotes; drop them.
+    df = df[(df["bid"] >= 0) & (df["ask"] > 0) & (df["ask"] >= df["bid"])].copy()
     df["mid"] = (df["bid"] + df["ask"]) / 2.0
     if "iv" not in df:
         df["iv"] = np.nan
     if "delta" not in df:
         df["delta"] = np.nan
+    df.loc[~(df["iv"] > 0), "iv"] = np.nan  # zero iv means the vendor had none
     t = (df["expiration"] - date).dt.days.clip(lower=0) / 365.0
     for i in df.index[df["iv"].isna()]:
         df.at[i, "iv"] = implied_vol(
