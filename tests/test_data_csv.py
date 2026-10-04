@@ -46,3 +46,6 @@ def test_csv_round_trip_fills_greeks(market, tmp_path):
     assert near30.delta == pytest.approx(float(ref.delta.iloc[0]), abs=0.03)
     q = m.quote(dates[0], "SPY", near30.expiration, near30.strike, "P")
     assert q == (near30.bid, near30.ask)
+    # A symbol with no quotes that day gives an empty chain, not an error.
+    assert m.chain(dates[0], "XLF", 30, 45).empty
+    assert m.atm_iv(dates[0], "XLF") is None

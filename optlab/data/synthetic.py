@@ -17,7 +17,7 @@ import pandas as pd
 from scipy.stats import norm
 
 from ..pricing import bs_price
-from .base import CHAIN_COLUMNS, MarketData
+from .base import CHAIN_COLUMNS, MarketData, empty_chain
 
 
 @dataclass
@@ -174,7 +174,7 @@ class SyntheticMarket(MarketData):
                     )
                 )
         if not rows:
-            return pd.DataFrame(columns=CHAIN_COLUMNS)
+            return empty_chain()
         return pd.concat(rows, ignore_index=True)[CHAIN_COLUMNS]
 
     def quote(self, date, symbol, expiration, strike, kind):

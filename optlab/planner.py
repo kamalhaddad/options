@@ -7,6 +7,7 @@ trades that were backtested.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -84,6 +85,8 @@ class Planner:
             v = self.m.vix().loc[:date]
             return float(v.iloc[-1]) / 100 if not v.empty else None
         iv = self.m.atm_iv(date, symbol)
+        if iv is not None and not (iv > 0 and math.isfinite(iv)):
+            iv = None  # bad vendor quotes
         if iv is not None:
             self.iv_hist.setdefault(symbol, {})[date] = iv
         return iv

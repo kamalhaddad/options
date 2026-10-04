@@ -23,3 +23,11 @@ def test_cli_backtest_smoke(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Validation gate" in out
     assert (tmp_path / "trades.csv").exists()
+
+
+def test_config_files_layer_in_order():
+    from optlab.config import load_config
+
+    cfg = load_config(["config/default.toml", "config/dolthub.toml"])
+    assert cfg.entry.short_dte_max == 60  # dolthub.toml wins
+    assert cfg.risk.csp_risk_basis == "stress"  # kept from default.toml

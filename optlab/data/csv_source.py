@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .base import CHAIN_COLUMNS, MarketData, enrich_chain
+from .base import MarketData, empty_chain, enrich_chain
 
 CBOE_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{name}_History.csv"
 
@@ -98,9 +98,7 @@ class CsvMarket(MarketData):
         key = (symbol, date)
         if key not in self._enriched:
             raw = self._chains.get(key)
-            self._enriched[key] = (
-                pd.DataFrame(columns=CHAIN_COLUMNS) if raw is None else enrich_chain(raw.reset_index(drop=True), date)
-            )
+            self._enriched[key] = empty_chain() if raw is None else enrich_chain(raw.reset_index(drop=True), date)
         return self._enriched[key]
 
     def chain(self, date, symbol, dte_min=0, dte_max=365):
