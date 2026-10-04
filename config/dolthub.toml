@@ -1,0 +1,14 @@
+# Layer on top of default.toml for backtests on DoltHub's free option data:
+#   optlab backtest --config config/default.toml config/dolthub.toml ...
+# That data keeps only a few expirations per day (roughly 2 weeks, 1 month and
+# 2 months out), so the playbook's 30-45 day window is often empty. These
+# windows are widened just enough to find a contract most weeks.
+[entry]
+short_dte_min = 25
+short_dte_max = 60
+long_dte_min = 50
+long_dte_max = 120
+
+[hedge]
+dte_min = 50
+dte_max = 100

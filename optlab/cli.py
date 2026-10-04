@@ -97,7 +97,9 @@ def main(argv: list[str] | None = None) -> None:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     def common(sp, default_source):
-        sp.add_argument("--config", help="TOML file overriding defaults (see config/default.toml)")
+        sp.add_argument(
+            "--config", nargs="*", help="TOML files overriding defaults, later ones win (see config/default.toml)"
+        )
         sp.add_argument("--source", default=default_source, choices=["synthetic", "csv", "yahoo"])
         sp.add_argument("--seed", type=int, default=1, help="synthetic data seed")
         sp.add_argument("--chains", nargs="*", help="option chain CSV/Parquet files (csv source)")

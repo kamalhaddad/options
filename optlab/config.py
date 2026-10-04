@@ -146,9 +146,11 @@ def _apply(obj: Any, values: dict[str, Any], path: str = "") -> None:
             setattr(obj, key, value)
 
 
-def load_config(path: str | Path | None = None) -> Config:
+def load_config(path: str | Path | list[str | Path] | None = None) -> Config:
+    """Defaults, overridden by each TOML file in order (later files win)."""
     cfg = Config()
-    if path:
-        with open(path, "rb") as fh:
+    paths = [] if path is None else [path] if isinstance(path, str | Path) else path
+    for p in paths:
+        with open(p, "rb") as fh:
             _apply(cfg, tomllib.load(fh))
     return cfg

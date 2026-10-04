@@ -1,0 +1,94 @@
+name: Real-data backtest
+
+# Backtests the playbook on DoltHub's free daily option chains, with Cboe's
+# VIX, VIX3M and PutWrite (PUT) index histories. Results are in the run
+# summary and the "backtest" artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: First day of data to fetch (the backtest starts a year later)
+        default: "2019-01-01"
+      end:
+        description: Last day
+        default: "2026-09-30"
+  push:
+    branches: [claude/backtester-scanner-ver3h2]
+    paths: [scripts/fetch_dolthub.py, .github/workflows/real-backtest.yml, config/dolthub.toml]
+
+env:
+  START: ${{ inputs.start || '2019-01-01' }}
+  END: ${{ inputs.end || '2026-09-30' }}
+  SYMBOLS: SPY T PFE INTC KMI F SOFI HPE WBD KHC VZ BAC EWZ FXI SLV GDX XLF
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+
+      - name: Cache option chains
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: data/dolthub_chains.csv.gz
+          key: dolthub-${{ env.START }}-${{ env.END }}-${{ hashFiles('scripts/fetch_dolthub.py') }}-${{ env.SYMBOLS }}
+
+      - name: Fetch option chains from DoltHub
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p data
+          python scripts/fetch_dolthub.py --start "$START" --end "$END" --symbols $SYMBOLS --out data/dolthub_chains.csv.gz
+
+      - name: Fetch Cboe indices
+        run: |
+          for n in VIX VIX3M PUT; do
+            curl -fsSL "https://cdn.cboe.com/api/global/us_indices/daily_prices/${n}_History.csv" -o "data/${n}_History.csv"
+          done
+
+      - name: Backtest
+        shell: bash
+        run: |
+          mkdir -p out
+          bt_start=$(python -c "import pandas as pd;print((pd.Timestamp('$START')+pd.DateOffset(years=1)).date())")
+          optlab backtest --source csv --chains data/dolthub_chains.csv.gz \
+            --vix data/VIX_History.csv --vix3m data/VIX3M_History.csv --put-index data/PUT_History.csv \
+            --config config/default.toml config/dolthub.toml \
+            --start "$bt_start" --end "$END" --out out | tee out/summary.txt
+          {
+            echo '```'
+            cat out/summary.txt
+            python - <<'PY'
+          import pandas as pd
+          def read(path):
+              try:
+                  return pd.read_csv(path)
+              except pd.errors.EmptyDataError:
+                  return pd.DataFrame()
+          t = read("out/trades.csv")
+          if t.empty:
+              print("No trades.")
+          else:
+              g = t.groupby(["sleeve", "structure"]).pnl.agg(["count", "sum", "mean"]).round(2)
+              print(g.to_string())
+              print()
+              print(t.exit_reason.value_counts().to_string())
+          s = read("out/skips.csv")
+          if not s.empty:
+              s["why"] = s.sleeve + ": " + s.reason.str.replace(r"[0-9$.,]+", "#", regex=True)
+              print()
+              print(s.why.value_counts().head(15).to_string())
+          PY
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backtest
+          path: out/
